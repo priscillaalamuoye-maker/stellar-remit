@@ -147,3 +147,423 @@ main {
   font-size: 0.8rem;
   padding: 2rem 0;
 }
+
+/* ── Wallet button ────────────────────────────────────────────────────────── */
+
+.wallet-btn {
+  border-radius: 6px;
+  padding: 0.45rem 0.9rem;
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+}
+
+.wallet-btn--connect {
+  background: var(--accent);
+  color: #06231f;
+  border: none;
+}
+
+.wallet-btn--connect:hover {
+  background: var(--accent-dark);
+}
+
+.wallet-btn--disconnect {
+  background: transparent;
+  color: var(--muted);
+  border: 1px solid var(--border);
+  margin-left: 0.5rem;
+}
+
+.wallet-btn--disconnect:hover {
+  color: var(--text);
+  border-color: var(--muted);
+}
+
+.wallet-btn--connecting,
+.wallet-btn[disabled] {
+  opacity: 0.55;
+  cursor: not-allowed;
+}
+
+.wallet-connected {
+  display: flex;
+  align-items: center;
+  gap: 0.25rem;
+}
+
+.wallet-address {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.82rem;
+  color: var(--accent);
+  background: rgba(79, 209, 197, 0.1);
+  border: 1px solid rgba(79, 209, 197, 0.25);
+  border-radius: 4px;
+  padding: 0.3rem 0.6rem;
+}
+
+/* ── Wallet gate (shown when disconnected) ───────────────────────────────── */
+
+.wallet-gate {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 0.75rem 1rem;
+  margin-bottom: 1.5rem;
+  font-size: 0.9rem;
+  color: var(--muted);
+}
+
+.wallet-gate p {
+  margin: 0;
+}
+
+/* ── Fee estimate panel ──────────────────────────────────────────────────── */
+
+.fee-estimate {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 1rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.fee-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.fee-value {
+  color: var(--text);
+  font-weight: 600;
+}
+
+.fee-breakdown {
+  color: var(--muted);
+  font-weight: 400;
+  font-size: 0.8rem;
+}
+
+/* ── Status line variants ────────────────────────────────────────────────── */
+
+.status-line {
+  margin-top: 1.25rem;
+  font-size: 0.9rem;
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+}
+
+.status-line--idle {
+  display: none;
+}
+
+.status-line--estimating,
+.status-line--submitting {
+  color: var(--accent);
+  background: rgba(79, 209, 197, 0.06);
+  border: 1px solid rgba(79, 209, 197, 0.2);
+}
+
+.status-line--success {
+  color: #68d391;
+  background: rgba(104, 211, 145, 0.06);
+  border: 1px solid rgba(104, 211, 145, 0.2);
+}
+
+.status-line--error {
+  color: #fc8181;
+  background: rgba(252, 129, 129, 0.06);
+  border: 1px solid rgba(252, 129, 129, 0.2);
+}
+
+.status-line--auth-error {
+  color: #f6ad55;
+  background: rgba(246, 173, 85, 0.06);
+  border: 1px solid rgba(246, 173, 85, 0.2);
+}
+
+.status-icon {
+  margin-right: 0.25rem;
+}
+
+/* ── Transaction result ──────────────────────────────────────────────────── */
+
+.tx-result {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  margin-top: 0.75rem;
+  padding: 0.6rem 0.9rem;
+  background: var(--surface);
+  border: 1px solid rgba(104, 211, 145, 0.3);
+  border-radius: 6px;
+  font-size: 0.88rem;
+}
+
+.tx-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.tx-hash {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.85rem;
+}
+
+.tx-hash:hover {
+  text-decoration: underline;
+}
+
+.tx-copy-btn {
+  color: var(--muted);
+  font-size: 0.78rem;
+  cursor: pointer;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  padding: 0.15rem 0.45rem;
+  transition: color 0.12s;
+}
+
+.tx-copy-btn:hover {
+  color: var(--text);
+}
+
+/* ── Tab bar ─────────────────────────────────────────────────────────────── */
+
+.tab-bar {
+  display: flex;
+  gap: 0;
+  border-bottom: 2px solid var(--border);
+  margin-bottom: 1.75rem;
+}
+
+.tab-btn {
+  background: none;
+  border: none;
+  border-bottom: 2px solid transparent;
+  margin-bottom: -2px;
+  padding: 0.6rem 1.2rem;
+  color: var(--muted);
+  font-size: 0.9rem;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  transition: color 0.15s, border-color 0.15s;
+}
+
+.tab-btn:hover {
+  color: var(--text);
+}
+
+.tab-btn--active {
+  color: var(--accent);
+  border-bottom-color: var(--accent);
+}
+
+.tab-badge {
+  background: var(--accent);
+  color: #06231f;
+  border-radius: 999px;
+  font-size: 0.7rem;
+  font-weight: 700;
+  padding: 0.1rem 0.45rem;
+  line-height: 1.4;
+}
+
+/* ── Status badges (Pending / Confirmed / Failed) ────────────────────────── */
+
+.status-badge {
+  display: inline-block;
+  border-radius: 999px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  padding: 0.2rem 0.65rem;
+  white-space: nowrap;
+  letter-spacing: 0.01em;
+}
+
+.status-badge--pending {
+  background: rgba(246, 173, 85, 0.12);
+  border: 1px solid rgba(246, 173, 85, 0.35);
+  color: #f6ad55;
+}
+
+.status-badge--confirmed {
+  background: rgba(104, 211, 145, 0.1);
+  border: 1px solid rgba(104, 211, 145, 0.3);
+  color: #68d391;
+}
+
+.status-badge--failed {
+  background: rgba(252, 129, 129, 0.1);
+  border: 1px solid rgba(252, 129, 129, 0.3);
+  color: #fc8181;
+}
+
+/* ── History tab ─────────────────────────────────────────────────────────── */
+
+.history-tab {
+  animation: fadeIn 0.15s ease;
+}
+
+@keyframes fadeIn {
+  from { opacity: 0; transform: translateY(4px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+
+.history-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 1rem;
+  flex-wrap: wrap;
+  gap: 0.5rem;
+}
+
+.history-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0;
+}
+
+.history-meta {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.history-updated {
+  font-size: 0.78rem;
+  color: var(--muted);
+}
+
+.history-refresh-btn {
+  font-size: 0.82rem;
+  padding: 0.35rem 0.75rem;
+}
+
+/* ── Pending tx banner ───────────────────────────────────────────────────── */
+
+.pending-tx-banner {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+  flex-wrap: wrap;
+  background: var(--surface);
+  border: 1px solid rgba(79, 209, 197, 0.25);
+  border-radius: 6px;
+  padding: 0.6rem 0.9rem;
+  margin-bottom: 1.25rem;
+  font-size: 0.87rem;
+}
+
+.pending-tx-label {
+  color: var(--muted);
+  white-space: nowrap;
+}
+
+.pending-tx-hint {
+  color: var(--muted);
+  font-size: 0.78rem;
+  margin-left: auto;
+}
+
+/* ── History table ───────────────────────────────────────────────────────── */
+
+.history-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.history-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.875rem;
+}
+
+.history-table th,
+.history-table td {
+  padding: 0.65rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.history-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.8rem;
+  background: var(--surface);
+}
+
+.history-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.history-table tbody tr:hover td {
+  background: rgba(255,255,255,0.02);
+}
+
+.history-amount {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.history-date {
+  color: var(--muted);
+  font-size: 0.82rem;
+}
+
+.explorer-link {
+  color: var(--accent);
+  text-decoration: none;
+  font-size: 0.82rem;
+}
+
+.explorer-link:hover {
+  text-decoration: underline;
+}
+
+/* ── Empty / loading states ──────────────────────────────────────────────── */
+
+.history-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 3rem 1rem;
+}
+
+.history-empty p {
+  margin: 0.25rem 0;
+}
+
+.history-empty-hint {
+  font-size: 0.82rem;
+}
+
+.history-loading {
+  color: var(--accent);
+}
+
+.history-error {
+  color: #fc8181;
+  font-size: 0.88rem;
+  margin: 0.75rem 0;
+  padding: 0.6rem 0.9rem;
+  background: rgba(252, 129, 129, 0.06);
+  border: 1px solid rgba(252, 129, 129, 0.2);
+  border-radius: 6px;
+}
