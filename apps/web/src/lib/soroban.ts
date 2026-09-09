@@ -16,6 +16,7 @@ import {
   BASE_FEE,
   Address,
   nativeToScVal,
+  scValToNative,
   xdr,
   rpc as SorobanRpc,
   Transaction,
@@ -211,6 +212,138 @@ export async function invokeBatchPayout(
   }
 
   return { txHash: sendResp.hash, status: getResp.status };
+}
+
+// ─── read-only queries ───────────────────────────────────────────────────────
+
+/**
+ * Off-ramp status values mirroring the contract's OffRampStatus enum.
+ * Order matches the Soroban discriminant: 0 = Pending, 1 = Confirmed, 2 = Failed.
+ */
+export type OffRampStatus = "Pending" | "Confirmed" | "Failed";
+
+/** Decoded PayoutRecord as returned by get_history(). */
+export interface PayoutRecord {
+  amount: bigint;      // in stroops
+  timestamp: number;   // Unix seconds
+  status: OffRampStatus;
+}
+
+/** Decoded RecipientInfo as returned by get_recipient(). */
+export interface RecipientInfo {
+  offRampRef: string;
+  totalReceived: bigint; // in stroops
+}
+
+/**
+ * Query the on-chain payout history for a given recipient address.
+ * Read-only — no auth or signing required.
+ *
+ * Returns an empty array if the recipient has no history or is not registered.
+ */
+export async function queryHistory(
+  recipientAddress: string
+): Promise<PayoutRecord[]> {
+  const server = buildServer();
+  const contract = new Contract(CONTRACT_ID);
+
+  // Build a simulation-only tx from a throw-away account placeholder.
+  // For view calls we still need a valid account, so we use the recipient.
+  const account = await server.getAccount(recipientAddress).catch(() => null);
+  if (!account) return [];
+
+  const recipientScVal = nativeToScVal(
+    Address.fromString(recipientAddress),
+    { type: "address" }
+  );
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call("get_history", recipientScVal))
+    .setTimeout(30)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(sim)) return [];
+
+  const successSim = sim as SorobanRpc.Api.SimulateTransactionSuccessResponse;
+  const resultScVal = successSim.result?.retval;
+  if (!resultScVal) return [];
+
+  // retval is ScVal::Vec containing PayoutRecord structs (each a ScVal::Map)
+  const raw = scValToNative(resultScVal) as Array<{
+    amount: bigint;
+    timestamp: bigint;
+    status: { tag: string } | string;
+  }>;
+
+  if (!Array.isArray(raw)) return [];
+
+  return raw.map((r) => ({
+    amount: BigInt(r.amount ?? 0n),
+    timestamp: Number(r.timestamp ?? 0n),
+    status: decodeStatus(r.status),
+  }));
+}
+
+/**
+ * Query registration info for a recipient.
+ * Returns null if the recipient is not registered.
+ */
+export async function queryRecipient(
+  recipientAddress: string
+): Promise<RecipientInfo | null> {
+  const server = buildServer();
+  const contract = new Contract(CONTRACT_ID);
+
+  const account = await server.getAccount(recipientAddress).catch(() => null);
+  if (!account) return null;
+
+  const recipientScVal = nativeToScVal(
+    Address.fromString(recipientAddress),
+    { type: "address" }
+  );
+
+  const tx = new TransactionBuilder(account, {
+    fee: BASE_FEE,
+    networkPassphrase: NETWORK_PASSPHRASE,
+  })
+    .addOperation(contract.call("get_recipient", recipientScVal))
+    .setTimeout(30)
+    .build();
+
+  const sim = await server.simulateTransaction(tx);
+  if (SorobanRpc.Api.isSimulationError(sim)) return null;
+
+  const successSim = sim as SorobanRpc.Api.SimulateTransactionSuccessResponse;
+  const resultScVal = successSim.result?.retval;
+  if (!resultScVal) return null;
+
+  const raw = scValToNative(resultScVal) as
+    | { off_ramp_ref: string; total_received: bigint }
+    | null
+    | undefined;
+
+  if (!raw) return null;
+  return {
+    offRampRef: raw.off_ramp_ref ?? "",
+    totalReceived: BigInt(raw.total_received ?? 0n),
+  };
+}
+
+/** Decode a Soroban enum variant (can come back as string or { tag } object). */
+function decodeStatus(raw: unknown): OffRampStatus {
+  const tag =
+    typeof raw === "string"
+      ? raw
+      : typeof raw === "object" && raw !== null && "tag" in raw
+      ? String((raw as { tag: unknown }).tag)
+      : "";
+  if (tag === "Confirmed") return "Confirmed";
+  if (tag === "Failed") return "Failed";
+  return "Pending";
 }
 
 // ─── error classification ────────────────────────────────────────────────────
