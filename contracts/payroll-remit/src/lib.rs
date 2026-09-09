@@ -6,6 +6,21 @@
 //! confirmed out-of-band by an off-ramp partner and recorded on-chain via
 //! `record_offramp` for auditability.
 //!
+//! ## Role-based access control
+//!
+//! The contract admin can delegate specific permissions to sub-admin addresses
+//! using `set_role`. Three roles are defined:
+//!
+//! | Role               | `add_recipient` | `batch_payout` | `record_offramp` | `set_role` |
+//! |--------------------|:-:|:-:|:-:|:-:|
+//! | `ContractAdmin`    | ✓ | ✓ | ✓ | ✓ |
+//! | `RecipientManager` | ✓ | ✗ | ✗ | ✗ |
+//! | `OffRampRecorder`  | ✗ | ✗ | ✓ | ✗ |
+//!
+//! Only the top-level contract admin stored at `DataKey::Admin` can call
+//! `set_role`. Roles cannot be self-escalated — a sub-admin cannot grant
+//! roles to themselves or others.
+//!
 //! ## Events
 //!
 //! All state-changing operations emit a Soroban contract event so that
@@ -14,10 +29,11 @@
 //!
 //! | topic[0] (symbol) | topic[1]         | data payload                               |
 //! |-------------------|------------------|--------------------------------------------|
-//! | `"initialized"`   | —                | `{ admin, token, timestamp }`              |
-//! | `"recipient_added"` | recipient addr | `{ off_ramp_ref, timestamp }`              |
-//! | `"payout_batch"`  | —                | `{ recipients, amounts, timestamp }`       |
-//! | `"offramp_recorded"` | recipient addr| `{ status, timestamp }`                    |
+//! | `"init"`          | —                | `{ admin, token, timestamp }`              |
+//! | `"rcpt_add"`      | recipient addr   | `{ off_ramp_ref, timestamp }`              |
+//! | `"payout"`        | —                | `{ recipients, amounts, timestamp }`       |
+//! | `"offramp"`       | recipient addr   | `{ status, timestamp }`                    |
+//! | `"role_set"`      | grantee addr     | `{ role, timestamp }`                      |
 
 #![no_std]
 
@@ -32,11 +48,28 @@ use soroban_sdk::{
 pub enum DataKey {
     Admin,
     Token,
+    Role(Address),
     Recipient(Address),
     History(Address),
 }
 
 // ─── domain types ─────────────────────────────────────────────────────────────
+
+/// Permission role assigned to a sub-admin address.
+///
+/// Only the top-level `Admin` (stored at `DataKey::Admin`) may call
+/// `set_role`. Sub-admins cannot escalate their own or others' privileges.
+#[contracttype]
+#[derive(Clone, PartialEq)]
+pub enum Role {
+    /// Full access: can manage recipients, execute payouts, record off-ramp
+    /// results, and delegate roles to others.
+    ContractAdmin,
+    /// Restricted: can call `add_recipient` only.
+    RecipientManager,
+    /// Restricted: can call `record_offramp` only.
+    OffRampRecorder,
+}
 
 #[contracttype]
 #[derive(Clone)]
@@ -97,6 +130,14 @@ pub struct OffRampRecordedEvent {
     pub timestamp: u64,
 }
 
+/// Emitted by `set_role`.
+#[contracttype]
+#[derive(Clone)]
+pub struct RoleSetEvent {
+    pub role: Role,
+    pub timestamp: u64,
+}
+
 // ─── errors ───────────────────────────────────────────────────────────────────
 
 #[contracterror]
@@ -121,7 +162,7 @@ impl PayrollRemit {
     /// Initialize the contract with an admin and the settlement token
     /// (e.g. a USDC Stellar Asset Contract address, or native XLM's SAC).
     ///
-    /// Emits: `initialized` event.
+    /// Emits: `init` event.
     pub fn init(env: Env, admin: Address, token: Address) -> Result<(), PayrollError> {
         if env.storage().instance().has(&DataKey::Admin) {
             return Err(PayrollError::AlreadyInitialized);
@@ -142,20 +183,67 @@ impl PayrollRemit {
         Ok(())
     }
 
+    /// Delegate a role to a sub-admin address.
+    ///
+    /// Only the top-level contract admin may call this function. Sub-admins
+    /// with `ContractAdmin`, `RecipientManager`, or `OffRampRecorder` roles
+    /// cannot escalate their own or anyone else's privileges.
+    ///
+    /// Roles are persisted in contract storage under `DataKey::Role(grantee)`.
+    ///
+    /// Emits: `role_set` event with the grantee as topic[1].
+    pub fn set_role(
+        env: Env,
+        admin: Address,
+        grantee: Address,
+        role: Role,
+    ) -> Result<(), PayrollError> {
+        // Only the top-level admin stored at DataKey::Admin can grant roles.
+        Self::require_top_admin(&env, &admin)?;
+
+        env.storage()
+            .persistent()
+            .set(&DataKey::Role(grantee.clone()), &role);
+
+        env.events().publish(
+            (symbol_short!("role_set"), grantee),
+            RoleSetEvent {
+                role,
+                timestamp: env.ledger().timestamp(),
+            },
+        );
+
+        Ok(())
+    }
+
+    /// Read the role assigned to an address, if any.
+    pub fn get_role(env: Env, address: Address) -> Option<Role> {
+        env.storage()
+            .persistent()
+            .get(&DataKey::Role(address))
+    }
+
     /// Register (or update) a payout recipient with an off-ramp reference.
     /// The off_ramp_ref should be an opaque/hashed pointer to the
     /// recipient's local bank account or mobile-money handle — never store
     /// raw account numbers on-chain.
     ///
-    /// Emits: `rcpt_added` event with the recipient address as a second topic
-    /// so subscribers can filter by specific recipient.
+    /// Authorized callers: `ContractAdmin` role or top-level admin,
+    ///                      `RecipientManager` role.
+    ///
+    /// Emits: `rcpt_add` event with the recipient address as topic[1].
     pub fn add_recipient(
         env: Env,
-        admin: Address,
+        caller: Address,
         recipient: Address,
         off_ramp_ref: String,
     ) -> Result<(), PayrollError> {
-        Self::require_admin(&env, &admin)?;
+        Self::require_role_any(
+            &env,
+            &caller,
+            &[Role::ContractAdmin, Role::RecipientManager],
+        )?;
+
         let info = RecipientInfo {
             off_ramp_ref: off_ramp_ref.clone(),
             total_received: 0,
@@ -177,20 +265,22 @@ impl PayrollRemit {
 
     /// Settle a batch of payouts in a single call. `recipients` and
     /// `amounts` must be the same length and are paired by index.
-    /// Transfers the settlement token from the admin/treasury to each
+    /// Transfers the settlement token from the caller/treasury to each
     /// recipient's contract-tracked balance and appends a Pending
     /// off-ramp record for each.
+    ///
+    /// Authorized callers: top-level admin or `ContractAdmin` role only.
     ///
     /// Emits: `payout` event containing the full recipients/amounts vectors
     /// and the ledger timestamp so the batch is fully reconstructable from
     /// the event alone.
     pub fn batch_payout(
         env: Env,
-        admin: Address,
+        caller: Address,
         recipients: Vec<Address>,
         amounts: Vec<i128>,
     ) -> Result<(), PayrollError> {
-        Self::require_admin(&env, &admin)?;
+        Self::require_role_any(&env, &caller, &[Role::ContractAdmin])?;
 
         if recipients.len() != amounts.len() {
             return Err(PayrollError::MismatchedBatch);
@@ -222,8 +312,8 @@ impl PayrollRemit {
                 .get(&DataKey::Recipient(recipient.clone()))
                 .ok_or(PayrollError::RecipientNotFound)?;
 
-            // On-chain settlement leg: admin/treasury -> recipient.
-            token_client.transfer(&admin, &recipient, &amount);
+            // On-chain settlement leg: caller/treasury -> recipient.
+            token_client.transfer(&caller, &recipient, &amount);
 
             info.total_received += amount;
             env.storage()
@@ -265,15 +355,21 @@ impl PayrollRemit {
     /// succeeded. Keeps an auditable link between on-chain settlement and
     /// off-chain delivery.
     ///
-    /// Emits: `offramp` event with the recipient address as a second topic
-    /// so subscribers can filter by specific recipient.
+    /// Authorized callers: top-level admin, `ContractAdmin` role,
+    ///                      or `OffRampRecorder` role.
+    ///
+    /// Emits: `offramp` event with the recipient address as topic[1].
     pub fn record_offramp(
         env: Env,
-        admin: Address,
+        caller: Address,
         recipient: Address,
         status: OffRampStatus,
     ) -> Result<(), PayrollError> {
-        Self::require_admin(&env, &admin)?;
+        Self::require_role_any(
+            &env,
+            &caller,
+            &[Role::ContractAdmin, Role::OffRampRecorder],
+        )?;
 
         let mut history: Vec<PayoutRecord> = env
             .storage()
@@ -315,7 +411,12 @@ impl PayrollRemit {
             .get(&DataKey::Recipient(recipient))
     }
 
-    fn require_admin(env: &Env, caller: &Address) -> Result<(), PayrollError> {
+    // ─── internal auth helpers ────────────────────────────────────────────────
+
+    /// Require that `caller` is the top-level contract admin stored at
+    /// `DataKey::Admin`. Used exclusively by `set_role` to prevent privilege
+    /// escalation by sub-admins.
+    fn require_top_admin(env: &Env, caller: &Address) -> Result<(), PayrollError> {
         let admin: Address = env
             .storage()
             .instance()
@@ -324,6 +425,53 @@ impl PayrollRemit {
         if admin != *caller {
             return Err(PayrollError::Unauthorized);
         }
+        caller.require_auth();
+        Ok(())
+    }
+
+    /// Require that `caller` is either:
+    /// - the top-level contract admin (`DataKey::Admin`), or
+    /// - an address whose stored `Role` is one of `allowed_roles`.
+    ///
+    /// Always calls `caller.require_auth()` so Soroban verifies the
+    /// transaction signature regardless of which path matches.
+    fn require_role_any(
+        env: &Env,
+        caller: &Address,
+        allowed_roles: &[Role],
+    ) -> Result<(), PayrollError> {
+        // Check contract not yet initialized.
+        if !env.storage().instance().has(&DataKey::Admin) {
+            return Err(PayrollError::NotInitialized);
+        }
+
+        let top_admin: Address = env
+            .storage()
+            .instance()
+            .get(&DataKey::Admin)
+            .ok_or(PayrollError::NotInitialized)?;
+
+        // Top-level admin always has full access.
+        if *caller == top_admin {
+            caller.require_auth();
+            return Ok(());
+        }
+
+        // Check the caller's assigned role.
+        let stored_role: Option<Role> = env
+            .storage()
+            .persistent()
+            .get(&DataKey::Role(caller.clone()));
+
+        let authorized = match stored_role {
+            Some(ref role) => allowed_roles.iter().any(|r| r == role),
+            None => false,
+        };
+
+        if !authorized {
+            return Err(PayrollError::Unauthorized);
+        }
+
         caller.require_auth();
         Ok(())
     }
