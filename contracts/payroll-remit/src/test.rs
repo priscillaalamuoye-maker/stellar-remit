@@ -370,8 +370,7 @@ fn test_unauthorized_caller_rejected() {
     client.init(&admin, &token_addr);
 
     let r1 = Address::generate(&env);
-    let result =
-        client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
+    let result = client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
     // require_admin compares stored admin to caller before require_auth;
     // with mock_all_auths this still surfaces as Unauthorized from our check.
     assert!(result.is_err());
