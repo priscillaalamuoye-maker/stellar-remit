@@ -75,6 +75,59 @@ jobs:
       - name: Run contract tests
         run: cargo test -p payroll-remit --verbose
 
+      # ── Event-spec verification ─────────────────────────────────────────────
+      # Asserts that every required event symbol and its payload fields are
+      # present in the contract source. This acts as a lightweight contract-spec
+      # gate: if an event is renamed or its struct fields change, CI fails fast
+      # without waiting for integration tests.
+      - name: Verify event specs in contract source
+        run: |
+          set -euo pipefail
+          SRC=contracts/payroll-remit/src/lib.rs
+
+          check() {
+            local label="$1"; shift
+            for pattern in "$@"; do
+              if ! grep -qF "$pattern" "$SRC"; then
+                echo "FAIL [$label]: expected to find '$pattern' in $SRC"
+                exit 1
+              fi
+            done
+            echo "OK [$label]"
+          }
+
+          # init → topic "init", struct InitializedEvent { admin, token, timestamp }
+          check "InitializedEvent" \
+            'symbol_short!("init")' \
+            'pub struct InitializedEvent' \
+            'pub admin: Address' \
+            'pub token: Address' \
+            'pub timestamp: u64'
+
+          # add_recipient → topic "rcpt_add" + recipient topic, struct RecipientAddedEvent
+          check "RecipientAddedEvent" \
+            'symbol_short!("rcpt_add")' \
+            'pub struct RecipientAddedEvent' \
+            'pub off_ramp_ref: String' \
+            'pub timestamp: u64'
+
+          # batch_payout → topic "payout", struct PayoutBatchEvent { recipients, amounts, timestamp }
+          check "PayoutBatchEvent" \
+            'symbol_short!("payout")' \
+            'pub struct PayoutBatchEvent' \
+            'pub recipients: Vec<Address>' \
+            'pub amounts: Vec<i128>' \
+            'pub timestamp: u64'
+
+          # record_offramp → topic "offramp" + recipient topic, struct OffRampRecordedEvent
+          check "OffRampRecordedEvent" \
+            'symbol_short!("offramp")' \
+            'pub struct OffRampRecordedEvent' \
+            'pub status: OffRampStatus' \
+            'pub timestamp: u64'
+
+          echo "All event specs verified."
+
       - name: Install cargo-tarpaulin
         uses: taiki-e/install-action@v2
         with:

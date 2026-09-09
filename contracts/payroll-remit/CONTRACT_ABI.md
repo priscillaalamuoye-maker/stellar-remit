@@ -194,6 +194,134 @@ Query the payout history for a recipient.
 - `NotInitialized` - If contract not initialized
 - `RecipientNotFound` - If recipient not registered
 
+## Events
+
+All state-changing operations emit a Soroban contract event. Indexers, off-ramp partners, and audit tooling can reconstruct every lifecycle transition from events alone without reading contract storage.
+
+### Event topic conventions
+
+Each event has one or two topics followed by a typed data payload:
+
+| topic\[0\] | topic\[1\] | Emitted by |
+|---|---|---|
+| `"init"` | — | `init` |
+| `"rcpt_add"` | `recipient: Address` | `add_recipient` |
+| `"payout"` | — | `batch_payout` |
+| `"offramp"` | `recipient: Address` | `record_offramp` |
+
+Events with a `recipient` in topic\[1\] allow subscribers to filter by a specific recipient address without decoding the data payload.
+
+---
+
+### `InitializedEvent`
+
+Emitted once when `init` is called successfully.
+
+**Topics:** `("init",)`
+
+**Data payload:**
+
+```rust
+pub struct InitializedEvent {
+    pub admin: Address,   // Contract administrator
+    pub token: Address,   // Settlement token (USDC/XLM SAC address)
+    pub timestamp: u64,   // Ledger timestamp at initialization
+}
+```
+
+**Example (pseudocode):**
+```
+topics: ["init"]
+data:   { admin: "GADMIN…", token: "GAUSDC…", timestamp: 1700000000 }
+```
+
+---
+
+### `RecipientAddedEvent`
+
+Emitted each time `add_recipient` registers or updates a recipient.
+
+**Topics:** `("rcpt_add", recipient: Address)`
+
+**Data payload:**
+
+```rust
+pub struct RecipientAddedEvent {
+    pub off_ramp_ref: String,   // Opaque/hashed off-ramp handle (never raw account number)
+    pub timestamp: u64,         // Ledger timestamp at registration
+}
+```
+
+**Example (pseudocode):**
+```
+topics: ["rcpt_add", "GRECIP…"]
+data:   { off_ramp_ref: "hash:acct-001", timestamp: 1700000100 }
+```
+
+---
+
+### `PayoutBatchEvent`
+
+Emitted once per `batch_payout` call. The full `recipients`/`amounts` vectors are included so the batch is fully reconstructable from the event without reading storage.
+
+**Topics:** `("payout",)`
+
+**Data payload:**
+
+```rust
+pub struct PayoutBatchEvent {
+    pub recipients: Vec<Address>,   // Ordered list of recipient addresses
+    pub amounts: Vec<i128>,         // Corresponding payout amounts in stroops
+    pub timestamp: u64,             // Ledger timestamp of the batch
+}
+```
+
+`recipients[i]` and `amounts[i]` are always paired: the amount at index _i_ was sent to the recipient at index _i_.
+
+**Example (pseudocode):**
+```
+topics: ["payout"]
+data:   {
+  recipients: ["GRECIP1…", "GRECIP2…"],
+  amounts:    [1000, 2500],
+  timestamp:  1700000999
+}
+```
+
+---
+
+### `OffRampRecordedEvent`
+
+Emitted each time `record_offramp` updates the fiat-delivery status for a recipient.
+
+**Topics:** `("offramp", recipient: Address)`
+
+**Data payload:**
+
+```rust
+pub struct OffRampRecordedEvent {
+    pub status: OffRampStatus,   // Confirmed | Failed (never Pending — that is set by batch_payout)
+    pub timestamp: u64,          // Ledger timestamp of the status update
+}
+```
+
+**Example (pseudocode):**
+```
+topics: ["offramp", "GRECIP…"]
+data:   { status: Confirmed, timestamp: 1700002000 }
+```
+
+---
+
+### Indexer integration notes
+
+- All four topic\[0\] symbols are ≤ 9 characters, satisfying the `symbol_short!` constraint.
+- `PayoutBatchEvent` is the primary event for payment rail auditing: a single event per transaction contains the complete batch.
+- `OffRampRecordedEvent` closes the loop: pair it with the preceding `PayoutBatchEvent` (matched by `recipient` topic and ordered `timestamp`) to confirm end-to-end settlement.
+- `RecipientAddedEvent` and `OffRampRecordedEvent` carry the recipient address as topic\[1\], enabling O(1) filter-by-recipient on any Soroban event indexer.
+
+---
+
 ## Data Storage
 
 ### Instance Storage
