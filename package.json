@@ -1,0 +1,11 @@
+{
+  "name": "stellar-remit-monorepo",
+  "version": "0.1.0",
+  "private": true,
+  "scripts": {
+    "setup": "husky install"
+  },
+  "devDependencies": {
+    "husky": "^9.0.11"
+  }
+}

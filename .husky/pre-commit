@@ -1,0 +1,18 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+echo "🔍 Running pre-commit checks..."
+
+# Check Rust formatting and linting
+echo "🦀 Checking Rust code..."
+cargo fmt --all -- --check || exit 1
+cargo clippy --all-targets -- -D warnings || exit 1
+
+# Check TypeScript
+echo "📘 Checking TypeScript..."
+cd apps/web
+npm run typecheck || exit 1
+npm run lint || exit 1
+cd ../..
+
+echo "✅ All pre-commit checks passed!"

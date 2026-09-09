@@ -1,0 +1,12 @@
+#!/bin/sh
+. "$(dirname "$0")/_/husky.sh"
+
+# Enforce Conventional Commits format
+if ! head -1 "$1" | grep -qE "^(feat|fix|docs|style|refactor|perf|test|chore|ci|revert)(\(.+\))?!?: "; then
+  echo "❌ Commit message must follow Conventional Commits format:"
+  echo "   feat: description"
+  echo "   fix: description"
+  echo "   docs: description"
+  echo "   etc."
+  exit 1
+fi

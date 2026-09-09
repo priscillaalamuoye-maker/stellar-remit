@@ -1,0 +1,157 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  security-scan:
+    name: Security — dependency & SAST checks
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@master
+        with:
+          scan-type: 'fs'
+          scan-ref: '.'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+
+      - name: Upload Trivy results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v2
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  contract-test:
+    name: Contract — build & test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo registry
+        uses: actions/cache@v4
+        with:
+          path: |
+            ~/.cargo/registry
+            ~/.cargo/git
+            target
+          key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.lock') }}
+          restore-keys: cargo-${{ runner.os }}-
+
+      - name: Check formatting
+        run: cargo fmt --all -- --check
+
+      - name: Clippy
+        run: cargo clippy --all-targets -- -D warnings
+
+      - name: Run contract tests
+        run: cargo test -p payroll-remit
+
+      - name: Generate coverage report
+        run: |
+          cargo install cargo-tarpaulin
+          cargo tarpaulin -p payroll-remit --out Xml --exclude-files tests/
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./cobertura.xml
+          flags: contracts
+          fail_ci_if_error: false
+
+      - name: Build wasm artifact
+        run: cargo build --target wasm32-unknown-unknown --release -p payroll-remit
+
+      - name: Upload wasm artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: payroll-remit-wasm
+          path: target/wasm32-unknown-unknown/release/payroll_remit.wasm
+
+  web-build:
+    name: Web — lint, typecheck & build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: apps/web
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: apps/web/package-lock.json
+
+      - name: Install dependencies
+        run: npm install --no-audit --no-fund
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      - name: Build
+        run: npm run build
+
+      - name: Run tests with coverage
+        run: npm run test:coverage
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v3
+        with:
+          files: ./apps/web/coverage/coverage-final.json
+          flags: web
+          fail_ci_if_error: false
+
+  web-build:
+    name: Docker — build web image
+    runs-on: ubuntu-latest
+    needs: [web-build]
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Build web image
+        run: docker build -f docker/Dockerfile.web -t stellar-remit-web:ci .
+
+  deploy-testnet:
+    name: Deploy contract to testnet
+    runs-on: ubuntu-latest
+    needs: [contract-test]
+    if: github.ref == 'refs/heads/main' && github.event_name == 'push'
+    environment: testnet
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Download wasm artifact
+        uses: actions/download-artifact@v4
+        with:
+          name: payroll-remit-wasm
+          path: dist
+
+      - name: Install soroban-cli
+        run: cargo install --locked soroban-cli --version 21.5.0
+
+      - name: Deploy to testnet
+        env:
+          SOROBAN_SECRET_KEY: ${{ secrets.SOROBAN_DEPLOYER_SECRET }}
+        run: |
+          soroban keys add deployer --secret-key "$SOROBAN_SECRET_KEY" || true
+          soroban contract deploy \
+            --wasm dist/payroll_remit.wasm \
+            --source deployer \
+            --network testnet
