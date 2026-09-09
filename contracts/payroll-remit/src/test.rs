@@ -83,8 +83,8 @@ fn test_init_emits_initialized_event() {
     assert!(result.is_some(), "expected 'init' event to be emitted");
 
     let (_topics, data) = result.unwrap();
-    let payload: InitializedEvent =
-        InitializedEvent::try_from_val(&env, &data).expect("data should decode as InitializedEvent");
+    let payload: InitializedEvent = InitializedEvent::try_from_val(&env, &data)
+        .expect("data should decode as InitializedEvent");
     assert_eq!(payload.admin, admin);
     assert_eq!(payload.token, token_addr);
     assert_eq!(payload.timestamp, 1_700_000_000);
@@ -126,16 +126,21 @@ fn test_add_recipient_emits_event() {
             .map(|t| t == recipient.clone().into_val(&env))
             .unwrap_or(false);
         if t0_match && t1_match {
-            let payload: RecipientAddedEvent =
-                RecipientAddedEvent::try_from_val(&env, &data)
-                    .expect("data should decode as RecipientAddedEvent");
-            assert_eq!(payload.off_ramp_ref, String::from_str(&env, "hash:acct-007"));
+            let payload: RecipientAddedEvent = RecipientAddedEvent::try_from_val(&env, &data)
+                .expect("data should decode as RecipientAddedEvent");
+            assert_eq!(
+                payload.off_ramp_ref,
+                String::from_str(&env, "hash:acct-007")
+            );
             assert_eq!(payload.timestamp, 1_700_000_100);
             found = true;
             break;
         }
     }
-    assert!(found, "expected 'rcpt_add' event with correct recipient topic");
+    assert!(
+        found,
+        "expected 'rcpt_add' event with correct recipient topic"
+    );
 }
 
 // ─── batch_payout ─────────────────────────────────────────────────────────────
@@ -207,8 +212,8 @@ fn test_batch_payout_emits_event() {
     assert!(result.is_some(), "expected 'payout' event to be emitted");
 
     let (_topics, data) = result.unwrap();
-    let payload: PayoutBatchEvent =
-        PayoutBatchEvent::try_from_val(&env, &data).expect("data should decode as PayoutBatchEvent");
+    let payload: PayoutBatchEvent = PayoutBatchEvent::try_from_val(&env, &data)
+        .expect("data should decode as PayoutBatchEvent");
     assert_eq!(payload.recipients.len(), 2);
     assert_eq!(payload.amounts.get(0).unwrap(), 500i128);
     assert_eq!(payload.amounts.get(1).unwrap(), 1_500i128);
@@ -281,9 +286,8 @@ fn test_record_offramp_emits_event() {
             .map(|t| t == recipient.clone().into_val(&env))
             .unwrap_or(false);
         if t0_match && t1_match {
-            let payload: OffRampRecordedEvent =
-                OffRampRecordedEvent::try_from_val(&env, &data)
-                    .expect("data should decode as OffRampRecordedEvent");
+            let payload: OffRampRecordedEvent = OffRampRecordedEvent::try_from_val(&env, &data)
+                .expect("data should decode as OffRampRecordedEvent");
             match payload.status {
                 OffRampStatus::Confirmed => {}
                 _ => panic!("expected Confirmed in event payload"),
@@ -293,7 +297,10 @@ fn test_record_offramp_emits_event() {
             break;
         }
     }
-    assert!(found, "expected 'offramp' event with correct recipient topic");
+    assert!(
+        found,
+        "expected 'offramp' event with correct recipient topic"
+    );
 }
 
 #[test]
@@ -311,7 +318,11 @@ fn test_record_offramp_failed_status() {
     client.init(&admin, &token_addr);
 
     let recipient = Address::generate(&env);
-    client.add_recipient(&admin, &recipient, &String::from_str(&env, "hash:fail-test"));
+    client.add_recipient(
+        &admin,
+        &recipient,
+        &String::from_str(&env, "hash:fail-test"),
+    );
 
     let recipients = soroban_sdk::Vec::from_array(&env, [recipient.clone()]);
     let amounts = soroban_sdk::Vec::from_array(&env, [100i128]);
@@ -329,7 +340,10 @@ fn test_record_offramp_failed_status() {
     // The emitted offramp event should also carry Failed.
     let all = env.events().all();
     let result = find_event(&env, &all, &contract_id, symbol_short!("offramp"));
-    assert!(result.is_some(), "expected 'offramp' event for Failed status");
+    assert!(
+        result.is_some(),
+        "expected 'offramp' event for Failed status"
+    );
 
     let (_topics, data) = result.unwrap();
     let payload: OffRampRecordedEvent =
@@ -356,11 +370,8 @@ fn test_unauthorized_caller_rejected() {
     client.init(&admin, &token_addr);
 
     let r1 = Address::generate(&env);
-    let result = client.try_add_recipient(
-        &intruder,
-        &r1,
-        &String::from_str(&env, "hash:acct-001"),
-    );
+    let result =
+        client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
     // require_admin compares stored admin to caller before require_auth;
     // with mock_all_auths this still surfaces as Unauthorized from our check.
     assert!(result.is_err());
