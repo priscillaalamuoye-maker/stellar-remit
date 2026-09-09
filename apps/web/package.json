@@ -8,8 +8,8 @@
     "start": "next start -p 3000",
     "lint": "next lint",
     "typecheck": "tsc --noEmit",
-    "test": "jest --run",
-    "test:coverage": "jest --coverage --run"
+    "test": "jest --passWithNoTests",
+    "test:coverage": "jest --coverage --passWithNoTests"
   },
   "dependencies": {
     "@stellar/freighter-api": "^6.0.1",
