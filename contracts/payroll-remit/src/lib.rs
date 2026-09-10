@@ -218,9 +218,7 @@ impl PayrollRemit {
 
     /// Read the role assigned to an address, if any.
     pub fn get_role(env: Env, address: Address) -> Option<Role> {
-        env.storage()
-            .persistent()
-            .get(&DataKey::Role(address))
+        env.storage().persistent().get(&DataKey::Role(address))
     }
 
     /// Register (or update) a payout recipient with an off-ramp reference.
@@ -365,11 +363,7 @@ impl PayrollRemit {
         recipient: Address,
         status: OffRampStatus,
     ) -> Result<(), PayrollError> {
-        Self::require_role_any(
-            &env,
-            &caller,
-            &[Role::ContractAdmin, Role::OffRampRecorder],
-        )?;
+        Self::require_role_any(&env, &caller, &[Role::ContractAdmin, Role::OffRampRecorder])?;
 
         let mut history: Vec<PayoutRecord> = env
             .storage()
