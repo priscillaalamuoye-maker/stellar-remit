@@ -384,8 +384,7 @@ fn test_unauthorized_caller_rejected() {
     client.init(&admin, &token_addr);
 
     let r1 = Address::generate(&env);
-    let result =
-        client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
+    let result = client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
     assert!(result.is_err());
 }
 
@@ -491,7 +490,11 @@ fn test_recipient_manager_can_add_recipient() {
 
     let recipient = Address::generate(&env);
     // Must succeed — RecipientManager is allowed.
-    client.add_recipient(&manager, &recipient, &String::from_str(&env, "hash:mgr-001"));
+    client.add_recipient(
+        &manager,
+        &recipient,
+        &String::from_str(&env, "hash:mgr-001"),
+    );
 
     let info = client.get_recipient(&recipient);
     assert!(info.is_some(), "recipient should have been registered");
@@ -590,8 +593,7 @@ fn test_offramp_recorder_cannot_add_recipient() {
 
     let recipient = Address::generate(&env);
     // Must fail — OffRampRecorder cannot register recipients.
-    let result =
-        client.try_add_recipient(&recorder, &recipient, &String::from_str(&env, "hash:x"));
+    let result = client.try_add_recipient(&recorder, &recipient, &String::from_str(&env, "hash:x"));
     assert!(
         result.is_err(),
         "OffRampRecorder must not be able to call add_recipient"
