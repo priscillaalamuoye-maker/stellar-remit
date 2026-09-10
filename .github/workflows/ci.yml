@@ -126,6 +126,13 @@ jobs:
             'pub status: OffRampStatus' \
             'pub timestamp: u64'
 
+          # set_role → topic "role_set" + grantee topic, struct RoleSetEvent
+          check "RoleSetEvent" \
+            'symbol_short!("role_set")' \
+            'pub struct RoleSetEvent' \
+            'pub role: Role' \
+            'pub timestamp: u64'
+
           echo "All event specs verified."
 
       - name: Install cargo-tarpaulin
