@@ -23,8 +23,17 @@ const defaultHookReturn = {
   lastUpdated: null,
 };
 
-// We'll override individual properties per test via this mutable ref.
-let hookReturnOverride: Partial<typeof defaultHookReturn> = {};
+// Explicit type so overrides can assign string | null and number | null
+// without being constrained to the literal null inferred from defaultHookReturn.
+interface HookReturnOverride {
+  historyMap?: Map<string, PayoutRecord[]>;
+  loading?: boolean;
+  error?: string | null;
+  refresh?: () => void;
+  lastUpdated?: number | null;
+}
+
+let hookReturnOverride: HookReturnOverride = {};
 
 jest.mock("@/hooks/usePayoutHistory", () => ({
   usePayoutHistory: () => ({ ...defaultHookReturn, ...hookReturnOverride }),

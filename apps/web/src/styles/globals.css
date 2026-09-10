@@ -567,3 +567,165 @@ main {
   border: 1px solid rgba(252, 129, 129, 0.2);
   border-radius: 6px;
 }
+
+/* ── Analytics tab ───────────────────────────────────────────────────────── */
+
+.analytics-tab {
+  animation: fadeIn 0.15s ease;
+}
+
+.analytics-title {
+  font-size: 1.05rem;
+  font-weight: 600;
+  margin: 0 0 1.25rem;
+}
+
+.analytics-section {
+  margin-top: 1.75rem;
+}
+
+.analytics-section-title {
+  font-size: 0.85rem;
+  font-weight: 600;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  margin: 0 0 0.75rem;
+}
+
+/* ── Stat grid ───────────────────────────────────────────────────────────── */
+
+.stat-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(180px, 1fr));
+  gap: 0.875rem;
+}
+
+.stat-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 1rem 1.1rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  transition: border-color 0.15s;
+}
+
+.stat-card--success { border-left: 3px solid #68d391; }
+.stat-card--warning { border-left: 3px solid #f6ad55; }
+.stat-card--danger  { border-left: 3px solid #fc8181; }
+.stat-card--default { border-left: 3px solid var(--border); }
+
+.stat-label {
+  font-size: 0.75rem;
+  color: var(--muted);
+  font-weight: 500;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.stat-value {
+  font-size: 1.5rem;
+  font-weight: 700;
+  color: var(--text);
+  line-height: 1.1;
+  font-variant-numeric: tabular-nums;
+}
+
+.stat-sub {
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+/* ── Trend chart ─────────────────────────────────────────────────────────── */
+
+.trend-chart {
+  margin: 0;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 0.75rem 1rem 0.5rem;
+}
+
+.trend-svg {
+  display: block;
+  width: 100%;
+  overflow: visible;
+}
+
+.trend-caption {
+  font-size: 0.72rem;
+  color: var(--muted);
+  margin-top: 0.25rem;
+  text-align: center;
+}
+
+/* ── Top recipients table ────────────────────────────────────────────────── */
+
+.top-recipients-wrap {
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  overflow: hidden;
+}
+
+.top-recipients-table {
+  width: 100%;
+  border-collapse: collapse;
+  background: var(--surface);
+  font-size: 0.875rem;
+}
+
+.top-recipients-table th,
+.top-recipients-table td {
+  padding: 0.6rem 0.9rem;
+  border-bottom: 1px solid var(--border);
+  text-align: left;
+  white-space: nowrap;
+}
+
+.top-recipients-table th {
+  color: var(--muted);
+  font-weight: 500;
+  font-size: 0.78rem;
+}
+
+.top-recipients-table tbody tr:last-child td {
+  border-bottom: none;
+}
+
+.top-recipients-table tbody tr:hover td {
+  background: rgba(255, 255, 255, 0.02);
+}
+
+.rank-cell {
+  color: var(--muted);
+  font-weight: 600;
+  width: 2rem;
+}
+
+.analytics-amount {
+  font-family: "SFMono-Regular", Consolas, monospace;
+  font-size: 0.85rem;
+}
+
+.analytics-count {
+  color: var(--muted);
+  font-size: 0.85rem;
+}
+
+/* ── Analytics empty state ───────────────────────────────────────────────── */
+
+.analytics-empty {
+  text-align: center;
+  color: var(--muted);
+  padding: 3rem 1rem;
+}
+
+.analytics-empty p {
+  margin: 0.25rem 0;
+}
+
+.analytics-empty-hint {
+  font-size: 0.82rem;
+}

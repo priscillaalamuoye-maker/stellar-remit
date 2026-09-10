@@ -72,6 +72,8 @@ jobs:
       # resolves to 3.0.0; that version upgraded to rand_core 0.9, but
       # rand_chacha 0.3.1 (also pulled by soroban-env-host) uses rand_core 0.6,
       # making ChaCha20Rng fail the CryptoRng bound in testutils.rs.
+      # Two versions are present in the tree (2.2.0 and 3.0.0); downgrade 3.0.0
+      # to 2.2.0 so the whole graph stays on rand_core 0.6.
       - name: Pin ed25519-dalek to 2.x (soroban-env-host compat)
         run: cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0
 

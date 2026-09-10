@@ -3,6 +3,8 @@
 import { useState, useCallback, useMemo } from "react";
 import { useWallet } from "@/context/WalletContext";
 import HistoryTab from "@/components/HistoryTab";
+import AnalyticsTab from "@/components/AnalyticsTab";
+import { usePayoutHistory } from "@/hooks/usePayoutHistory";
 import {
   estimateBatchFee,
   invokeBatchPayout,
@@ -19,7 +21,7 @@ type Recipient = {
   offRampRef: string;
 };
 
-type Tab = "payout" | "history";
+type Tab = "payout" | "history" | "analytics";
 type StatusKind =
   | "idle"
   | "estimating"
@@ -204,6 +206,12 @@ export default function Dashboard() {
     return [...combined];
   }, [recipients, knownAddresses]);
 
+  // historyMap kept live for both History and Analytics tabs
+  const { historyMap } = usePayoutHistory(historyAddresses, {
+    intervalMs: 15_000,
+    enabled: isConnected,
+  });
+
   // ── render ─────────────────────────────────────────────────────────────────
 
   return (
@@ -234,6 +242,14 @@ export default function Dashboard() {
           {knownAddresses.length > 0 && (
             <span className="tab-badge">{knownAddresses.length}</span>
           )}
+        </button>
+        <button
+          role="tab"
+          aria-selected={activeTab === "analytics"}
+          className={`tab-btn${activeTab === "analytics" ? " tab-btn--active" : ""}`}
+          onClick={() => setActiveTab("analytics")}
+        >
+          Analytics
         </button>
       </div>
 
@@ -433,6 +449,25 @@ export default function Dashboard() {
               pendingTxHash={txResult?.txHash}
             />
           )}
+        </div>
+      )}
+
+      {/* ══ ANALYTICS TAB ══ */}
+      {activeTab === "analytics" && (
+        <div role="tabpanel" aria-label="Payout Analytics">
+          {!isConnected && (
+            <div className="wallet-gate">
+              <p>Connect your wallet to view analytics.</p>
+              <button
+                className="primary-btn"
+                onClick={connect}
+                disabled={connecting}
+              >
+                {connecting ? "Connecting…" : "Connect Wallet"}
+              </button>
+            </div>
+          )}
+          {isConnected && <AnalyticsTab historyMap={historyMap} />}
         </div>
       )}
     </section>
