@@ -4,13 +4,24 @@ members = [
     "contracts/payroll-remit",
 ]
 
-# ── Dependency pins ───────────────────────────────────────────────────────────
-# soroban-env-host 21.2.1 declares `ed25519-dalek = ">=2.0.0"`, which allows
-# Cargo to resolve ed25519-dalek 3.0.0.  ed25519-dalek 3.0 upgraded to
-# rand_core 0.9, but soroban-env-host also depends on rand_chacha 0.3.1 which
-# uses rand_core 0.6 — the two rand_core versions are incompatible, so
-# ChaCha20Rng no longer satisfies the CryptoRng bound that SigningKey::generate
-# requires.  Pin ed25519-dalek to the 2.x line to keep everything on
-# rand_core 0.6 until we upgrade to soroban-sdk v22+.
-[patch.crates-io]
-ed25519-dalek = { version = "=2.1.1" }
+# ── Workspace-level profiles ──────────────────────────────────────────────────
+# Defined here (workspace root) so they apply to all members.
+# Having them only in contracts/payroll-remit/Cargo.toml produces a warning
+# because non-root package profiles are ignored by Cargo.
+
+[profile.test]
+opt-level = 1
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true

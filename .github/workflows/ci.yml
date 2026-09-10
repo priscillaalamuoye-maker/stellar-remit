@@ -66,6 +66,14 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
+      # Pin ed25519-dalek to 2.x to avoid a rand_core version conflict.
+      # soroban-env-host 21.2.1 uses `ed25519-dalek = ">=2.0.0"` which Cargo
+      # resolves to 3.0.0; that version upgraded to rand_core 0.9, but
+      # rand_chacha 0.3.1 (also pulled by soroban-env-host) uses rand_core 0.6,
+      # making ChaCha20Rng fail the CryptoRng bound in testutils.rs.
+      - name: Pin ed25519-dalek to 2.x (soroban-env-host compat)
+        run: cargo update -p ed25519-dalek --precise 2.1.1
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
