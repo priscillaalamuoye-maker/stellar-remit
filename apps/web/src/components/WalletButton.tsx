@@ -10,7 +10,7 @@ import { useWallet } from "@/context/WalletContext";
  * • Connected     → truncated address pill + "Disconnect" link
  */
 export default function WalletButton() {
-  const { address, isConnected, connecting, connect, disconnect } = useWallet();
+  const { address, isConnected, connecting, error, connect, disconnect } = useWallet();
 
   if (connecting) {
     return (
@@ -38,8 +38,11 @@ export default function WalletButton() {
   }
 
   return (
-    <button className="wallet-btn wallet-btn--connect" onClick={connect}>
-      Connect Wallet
-    </button>
+    <span className="wallet-connect-area">
+      <button className="wallet-btn wallet-btn--connect" onClick={() => void connect()}>
+        Connect Wallet
+      </button>
+      {error && <span className="wallet-error" role="alert">{error}</span>}
+    </span>
   );
 }

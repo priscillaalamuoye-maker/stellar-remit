@@ -64,6 +64,14 @@ Core entrypoints (see `contracts/payroll-remit/src/lib.rs`):
 | Testnet | Real off-ramp partner integration (sandbox); web dashboard for senders; audit logging |
 | Mainnet | Security review, mainnet deployment, live off-ramp partner, monitoring/alerting |
 
+## Funding readiness
+
+StellarRemit is being developed as open-source infrastructure for transparent
+NGN payouts. The funding plan prioritizes an off-ramp sandbox integration,
+independent contract review, monitoring, operational runbooks, and a controlled
+testnet pilot. See [FUNDING.md](./FUNDING.md) for the proposed milestones,
+success metrics, risk controls, and budget framework.
+
 ## Development
 
 - Contracts: Rust + [Soroban SDK](https://developers.stellar.org/docs/build/smart-contracts/getting-started)
@@ -102,6 +110,7 @@ npm run test:coverage
 - **[CONTRACT_ABI.md](./contracts/payroll-remit/CONTRACT_ABI.md)** — Complete smart contract API reference
 - **[CHANGELOG.md](./CHANGELOG.md)** — Release history and version timeline
 - **[DEPRECATION_POLICY.md](./DEPRECATION_POLICY.md)** — Feature lifecycle and breaking change policy
+- **[FUNDING.md](./FUNDING.md)** — Grant-ready project brief and pilot plan
 
 ## License
 

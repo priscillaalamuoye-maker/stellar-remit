@@ -24,7 +24,7 @@ jobs:
       - uses: actions/checkout@v4
 
       - name: Run Trivy vulnerability scanner
-        uses: aquasecurity/trivy-action@0.20.0
+        uses: aquasecurity/trivy-action@v0.36.0
         with:
           scan-type: fs
           scan-ref: .
@@ -50,6 +50,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
+          toolchain: "1.81.0"
           components: rustfmt, clippy
           targets: wasm32-unknown-unknown
 
@@ -66,6 +67,16 @@ jobs:
           key: cargo-${{ runner.os }}-${{ hashFiles('**/Cargo.toml') }}
           restore-keys: cargo-${{ runner.os }}-
 
+      # Pin ed25519-dalek to 2.x to avoid a rand_core version conflict.
+      # soroban-env-host 21.2.1 uses `ed25519-dalek = ">=2.0.0"` which Cargo
+      # resolves to 3.0.0; that version upgraded to rand_core 0.9, but
+      # rand_chacha 0.3.1 (also pulled by soroban-env-host) uses rand_core 0.6,
+      # making ChaCha20Rng fail the CryptoRng bound in testutils.rs.
+      # Two versions are present in the tree (2.2.0 and 3.0.0); downgrade 3.0.0
+      # to 2.2.0 so the whole graph stays on rand_core 0.6.
+      - name: Pin ed25519-dalek to 2.x (soroban-env-host compat)
+        run: cargo update -p ed25519-dalek@3.0.0 --precise 2.2.0
+
       - name: Check formatting
         run: cargo fmt --all -- --check
 
@@ -74,6 +85,66 @@ jobs:
 
       - name: Run contract tests
         run: cargo test -p payroll-remit --verbose
+
+      # ── Event-spec verification ─────────────────────────────────────────────
+      # Asserts that every required event symbol and its payload fields are
+      # present in the contract source. This acts as a lightweight contract-spec
+      # gate: if an event is renamed or its struct fields change, CI fails fast
+      # without waiting for integration tests.
+      - name: Verify event specs in contract source
+        run: |
+          set -euo pipefail
+          SRC=contracts/payroll-remit/src/lib.rs
+
+          check() {
+            local label="$1"; shift
+            for pattern in "$@"; do
+              if ! grep -qF "$pattern" "$SRC"; then
+                echo "FAIL [$label]: expected to find '$pattern' in $SRC"
+                exit 1
+              fi
+            done
+            echo "OK [$label]"
+          }
+
+          # init → topic "init", struct InitializedEvent { admin, token, timestamp }
+          check "InitializedEvent" \
+            'symbol_short!("init")' \
+            'pub struct InitializedEvent' \
+            'pub admin: Address' \
+            'pub token: Address' \
+            'pub timestamp: u64'
+
+          # add_recipient → topic "rcpt_add" + recipient topic, struct RecipientAddedEvent
+          check "RecipientAddedEvent" \
+            'symbol_short!("rcpt_add")' \
+            'pub struct RecipientAddedEvent' \
+            'pub off_ramp_ref: String' \
+            'pub timestamp: u64'
+
+          # batch_payout → topic "payout", struct PayoutBatchEvent { recipients, amounts, timestamp }
+          check "PayoutBatchEvent" \
+            'symbol_short!("payout")' \
+            'pub struct PayoutBatchEvent' \
+            'pub recipients: Vec<Address>' \
+            'pub amounts: Vec<i128>' \
+            'pub timestamp: u64'
+
+          # record_offramp → topic "offramp" + recipient topic, struct OffRampRecordedEvent
+          check "OffRampRecordedEvent" \
+            'symbol_short!("offramp")' \
+            'pub struct OffRampRecordedEvent' \
+            'pub status: OffRampStatus' \
+            'pub timestamp: u64'
+
+          # set_role → topic "role_set" + grantee topic, struct RoleSetEvent
+          check "RoleSetEvent" \
+            'symbol_short!("role_set")' \
+            'pub struct RoleSetEvent' \
+            'pub role: Role' \
+            'pub timestamp: u64'
+
+          echo "All event specs verified."
 
       - name: Install cargo-tarpaulin
         uses: taiki-e/install-action@v2

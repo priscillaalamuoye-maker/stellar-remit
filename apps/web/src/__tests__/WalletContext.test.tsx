@@ -26,12 +26,13 @@ import { WalletProvider, useWallet } from "@/context/WalletContext";
 
 // A simple consumer component to read wallet state.
 function TestConsumer() {
-  const { address, isConnected, connecting, connect, disconnect } = useWallet();
+  const { address, isConnected, connecting, error, connect, disconnect } = useWallet();
   return (
     <div>
       <span data-testid="address">{address ?? "none"}</span>
       <span data-testid="connected">{String(isConnected)}</span>
       <span data-testid="connecting">{String(connecting)}</span>
+      <span data-testid="error">{error ?? "none"}</span>
       <button onClick={connect}>Connect</button>
       <button onClick={disconnect}>Disconnect</button>
     </div>
@@ -96,40 +97,18 @@ describe("WalletProvider", () => {
     });
   });
 
-  it("throws when Freighter extension is not installed", async () => {
+  it("shows an error when Freighter extension is not installed", async () => {
     mockIsConnected.mockResolvedValue({ isConnected: false });
-
-    // Wrap in try/catch since useWallet.connect() throws
-    let thrown = false;
-    function ThrowingConsumer() {
-      const { connect } = useWallet();
-      return (
-        <button
-          onClick={async () => {
-            try {
-              await connect();
-            } catch {
-              thrown = true;
-            }
-          }}
-        >
-          Connect
-        </button>
-      );
-    }
-
-    render(
-      <WalletProvider>
-        <ThrowingConsumer />
-      </WalletProvider>
-    );
+    renderWithProvider();
 
     await act(async () => {
       userEvent.click(screen.getByText("Connect"));
     });
 
     await waitFor(() => {
-      expect(thrown).toBe(true);
+      expect(screen.getByTestId("error")).toHaveTextContent(
+        "Freighter is not available in this browser"
+      );
     });
   });
 
