@@ -1,440 +1,51 @@
-"use client";
+import Link from "next/link";
 
-import { useState, useCallback, useMemo } from "react";
-import { useWallet } from "@/context/WalletContext";
-import HistoryTab from "@/components/HistoryTab";
-import {
-  estimateBatchFee,
-  invokeBatchPayout,
-  usdcToStroops,
-  WalletAuthError,
-  type FeeEstimate,
-} from "@/lib/soroban";
+const steps = [
+  ["01", "Connect your wallet", "Bring your Freighter wallet and choose the Stellar account funding the payout."],
+  ["02", "Add recipients", "Enter your payroll and vendor list with amounts and local off-ramp references."],
+  ["03", "Settle in USDC", "Review the network fee, sign once, and send a whole batch on-chain in minutes."],
+  ["04", "Cash out in NGN", "Your local payout partner completes the final handoff within 24 hours."],
+];
 
-// ─── types ────────────────────────────────────────────────────────────────────
-
-type Recipient = {
-  address: string;
-  amount: string;
-  offRampRef: string;
-};
-
-type Tab = "payout" | "history";
-type StatusKind =
-  | "idle"
-  | "estimating"
-  | "submitting"
-  | "success"
-  | "error"
-  | "auth-error";
-
-interface TxResult {
-  txHash: string;
-  status: string;
-}
-
-// ─── helpers ──────────────────────────────────────────────────────────────────
-
-function validateRecipients(recipients: Recipient[]): string | null {
-  if (recipients.length === 0) return "Add at least one recipient.";
-  for (let i = 0; i < recipients.length; i++) {
-    const r = recipients[i];
-    if (!r.address.trim().startsWith("G") || r.address.trim().length < 56) {
-      return `Row ${i + 1}: invalid Stellar address (must start with G, 56 chars).`;
-    }
-    const amt = Number(r.amount);
-    if (!r.amount || isNaN(amt) || amt <= 0) {
-      return `Row ${i + 1}: amount must be a positive number.`;
-    }
-  }
-  return null;
-}
-
-function stroopsToDisplay(stroops: bigint): string {
-  const units = stroops / 10_000_000n;
-  const frac = stroops % 10_000_000n;
-  return `${units}.${frac.toString().padStart(7, "0").replace(/0+$/, "") || "0"}`;
-}
-
-// ─── Dashboard ────────────────────────────────────────────────────────────────
-
-export default function Dashboard() {
-  const { address, isConnected, connect, connecting } = useWallet();
-
-  // ── tab state ──────────────────────────────────────────────────────────────
-  const [activeTab, setActiveTab] = useState<Tab>("payout");
-
-  // ── batch payout form state ────────────────────────────────────────────────
-  const [recipients, setRecipients] = useState<Recipient[]>([
-    { address: "", amount: "", offRampRef: "" },
-  ]);
-  const [statusKind, setStatusKind] = useState<StatusKind>("idle");
-  const [statusMsg, setStatusMsg] = useState<string | null>(null);
-  const [feeEstimate, setFeeEstimate] = useState<FeeEstimate | null>(null);
-  const [txResult, setTxResult] = useState<TxResult | null>(null);
-
-  // Addresses that have been paid out — passed to HistoryTab for polling.
-  const [knownAddresses, setKnownAddresses] = useState<string[]>([]);
-
-  // ── recipient table helpers ────────────────────────────────────────────────
-
-  function updateRecipient(
-    index: number,
-    field: keyof Recipient,
-    value: string
-  ) {
-    setRecipients((prev) =>
-      prev.map((r, i) => (i === index ? { ...r, [field]: value } : r))
-    );
-    setFeeEstimate(null);
-  }
-
-  function addRow() {
-    setRecipients((prev) => [
-      ...prev,
-      { address: "", amount: "", offRampRef: "" },
-    ]);
-    setFeeEstimate(null);
-  }
-
-  function removeRow(index: number) {
-    setRecipients((prev) => prev.filter((_, i) => i !== index));
-    setFeeEstimate(null);
-  }
-
-  // ── fee estimation ─────────────────────────────────────────────────────────
-
-  const handleEstimateFee = useCallback(async () => {
-    if (!address) return;
-    const err = validateRecipients(recipients);
-    if (err) {
-      setStatusKind("error");
-      setStatusMsg(err);
-      return;
-    }
-    setStatusKind("estimating");
-    setStatusMsg("Estimating transaction fee…");
-    setFeeEstimate(null);
-    try {
-      const estimate = await estimateBatchFee(
-        address,
-        recipients.map((r) => ({
-          address: r.address.trim(),
-          amount: usdcToStroops(r.amount),
-        }))
-      );
-      setFeeEstimate(estimate);
-      setStatusKind("idle");
-      setStatusMsg(null);
-    } catch (e) {
-      setStatusKind("error");
-      setStatusMsg(e instanceof Error ? e.message : "Fee estimation failed.");
-    }
-  }, [address, recipients]);
-
-  // ── submit batch ───────────────────────────────────────────────────────────
-
-  async function submitBatch() {
-    if (!address) {
-      setStatusKind("error");
-      setStatusMsg("Connect your Freighter wallet before submitting.");
-      return;
-    }
-    const err = validateRecipients(recipients);
-    if (err) {
-      setStatusKind("error");
-      setStatusMsg(err);
-      return;
-    }
-
-    setStatusKind("submitting");
-    setStatusMsg("Waiting for Freighter signature…");
-    setTxResult(null);
-
-    try {
-      const payoutRecipients = recipients.map((r) => ({
-        address: r.address.trim(),
-        amount: usdcToStroops(r.amount),
-      }));
-      const result = await invokeBatchPayout(address, payoutRecipients);
-
-      setTxResult(result);
-      setStatusKind("success");
-      setStatusMsg(
-        `Batch of ${recipients.length} recipient(s) settled on-chain.`
-      );
-
-      // Register addresses for history polling
-      setKnownAddresses((prev) => {
-        const next = new Set([
-          ...prev,
-          ...recipients.map((r) => r.address.trim()),
-        ]);
-        return [...next];
-      });
-    } catch (e) {
-      if (e instanceof WalletAuthError) {
-        setStatusKind("auth-error");
-        setStatusMsg(e.message);
-      } else {
-        setStatusKind("error");
-        setStatusMsg(e instanceof Error ? e.message : "Batch payout failed.");
-      }
-    }
-  }
-
-  // ── derived values ─────────────────────────────────────────────────────────
-
-  const total = recipients.reduce(
-    (sum, r) => sum + (Number(r.amount) || 0),
-    0
-  );
-  const isBusy =
-    statusKind === "estimating" ||
-    statusKind === "submitting" ||
-    connecting;
-  const canSubmit = isConnected && !isBusy;
-
-  // All addresses ever entered (for history tab even before submit)
-  const historyAddresses = useMemo(() => {
-    const fromForm = recipients
-      .map((r) => r.address.trim())
-      .filter((a) => a.startsWith("G") && a.length >= 56);
-    const combined = new Set([...knownAddresses, ...fromForm]);
-    return [...combined];
-  }, [recipients, knownAddresses]);
-
-  // ── render ─────────────────────────────────────────────────────────────────
-
+export default function LandingPage() {
   return (
-    <section className="dashboard">
-      <h1>StellarRemit</h1>
-      <p className="subtitle">
-        Batch, low-cost cross-border payouts on Stellar/Soroban — settled in
-        USDC and cashed out through local NGN off-ramp partners.
-      </p>
-
-      {/* ── tab bar ── */}
-      <div className="tab-bar" role="tablist">
-        <button
-          role="tab"
-          aria-selected={activeTab === "payout"}
-          className={`tab-btn${activeTab === "payout" ? " tab-btn--active" : ""}`}
-          onClick={() => setActiveTab("payout")}
-        >
-          Batch Payout
-        </button>
-        <button
-          role="tab"
-          aria-selected={activeTab === "history"}
-          className={`tab-btn${activeTab === "history" ? " tab-btn--active" : ""}`}
-          onClick={() => setActiveTab("history")}
-        >
-          History
-          {knownAddresses.length > 0 && (
-            <span className="tab-badge">{knownAddresses.length}</span>
-          )}
-        </button>
-      </div>
-
-      {/* ══ PAYOUT TAB ══ */}
-      {activeTab === "payout" && (
-        <div role="tabpanel" aria-label="Batch Payout">
-          {/* Wallet gate */}
-          {!isConnected && (
-            <div className="wallet-gate">
-              <p>Connect your Freighter wallet to submit payouts.</p>
-              <button
-                className="primary-btn"
-                onClick={connect}
-                disabled={connecting}
-              >
-                {connecting ? "Connecting…" : "Connect Wallet"}
-              </button>
-            </div>
-          )}
-
-          <table className="payout-table">
-            <thead>
-              <tr>
-                <th>Stellar Address</th>
-                <th>Amount (USDC)</th>
-                <th>Off-ramp reference</th>
-                <th></th>
-              </tr>
-            </thead>
-            <tbody>
-              {recipients.map((r, i) => (
-                <tr key={i}>
-                  <td>
-                    <input
-                      value={r.address}
-                      onChange={(e) =>
-                        updateRecipient(i, "address", e.target.value)
-                      }
-                      placeholder="G…"
-                      disabled={isBusy}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={r.amount}
-                      onChange={(e) =>
-                        updateRecipient(i, "amount", e.target.value)
-                      }
-                      placeholder="0.00"
-                      inputMode="decimal"
-                      disabled={isBusy}
-                    />
-                  </td>
-                  <td>
-                    <input
-                      value={r.offRampRef}
-                      onChange={(e) =>
-                        updateRecipient(i, "offRampRef", e.target.value)
-                      }
-                      placeholder="bank/mobile-money handle"
-                      disabled={isBusy}
-                    />
-                  </td>
-                  <td>
-                    <button
-                      className="link-btn"
-                      onClick={() => removeRow(i)}
-                      disabled={isBusy || recipients.length === 1}
-                    >
-                      Remove
-                    </button>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-
-          <div className="dashboard-actions">
-            <button className="secondary-btn" onClick={addRow} disabled={isBusy}>
-              + Add recipient
-            </button>
-            <div className="total">Total: {total.toFixed(2)} USDC</div>
-            {isConnected && (
-              <button
-                className="secondary-btn"
-                onClick={handleEstimateFee}
-                disabled={isBusy}
-              >
-                {statusKind === "estimating" ? "Estimating…" : "Estimate fee"}
-              </button>
-            )}
-            <button
-              className="primary-btn"
-              onClick={submitBatch}
-              disabled={!canSubmit}
-              title={!isConnected ? "Connect wallet first" : undefined}
-            >
-              {statusKind === "submitting"
-                ? "Submitting…"
-                : "Submit batch payout"}
-            </button>
+    <div className="landing-page">
+      <section className="landing-hero">
+        <div className="hero-copy">
+          <p className="eyebrow hero-eyebrow">Cross-border payments, made practical</p>
+          <h1>Fast, cheap cross-border payouts to Nigeria.</h1>
+          <p className="hero-lede">Settle salaries and vendor invoices on-chain. Cash out in NGN through local partners.</p>
+          <div className="hero-actions">
+            <Link className="hero-cta" href="/dashboard">Get started <span aria-hidden="true">↗</span></Link>
+            <a className="hero-secondary" href="#how-it-works">See how it works <span aria-hidden="true">↓</span></a>
           </div>
-
-          {/* Fee estimate panel */}
-          {feeEstimate && (
-            <div className="fee-estimate">
-              <span className="fee-label">Estimated fee</span>
-              <span className="fee-value">
-                {stroopsToDisplay(feeEstimate.totalFee)} XLM
-                <span className="fee-breakdown">
-                  {" "}
-                  ({stroopsToDisplay(feeEstimate.baseFee)} base +{" "}
-                  {stroopsToDisplay(feeEstimate.resourceFee)} resource)
-                </span>
-              </span>
-            </div>
-          )}
-
-          {/* Status line */}
-          {statusMsg && (
-            <div
-              className={`status-line status-line--${statusKind}`}
-              role="status"
-              aria-live="polite"
-            >
-              {statusKind === "auth-error" && (
-                <span className="status-icon">🔐 </span>
-              )}
-              {statusKind === "error" && (
-                <span className="status-icon">⚠ </span>
-              )}
-              {statusKind === "success" && (
-                <span className="status-icon">✓ </span>
-              )}
-              {statusMsg}
-            </div>
-          )}
-
-          {/* Transaction hash + explorer link */}
-          {txResult && (
-            <div className="tx-result">
-              <span className="tx-label">Transaction hash</span>
-              <a
-                className="tx-hash"
-                href={`https://stellar.expert/explorer/testnet/tx/${txResult.txHash}`}
-                target="_blank"
-                rel="noreferrer"
-                title={txResult.txHash}
-              >
-                {txResult.txHash.slice(0, 12)}…{txResult.txHash.slice(-8)}
-              </a>
-              <span
-                className="tx-copy-btn"
-                role="button"
-                tabIndex={0}
-                title="Copy full hash"
-                onClick={() =>
-                  navigator.clipboard.writeText(txResult.txHash)
-                }
-                onKeyDown={(e) =>
-                  e.key === "Enter" &&
-                  navigator.clipboard.writeText(txResult.txHash)
-                }
-              >
-                Copy
-              </span>
-              <button
-                className="secondary-btn"
-                style={{ marginLeft: "auto", fontSize: "0.8rem", padding: "0.25rem 0.6rem" }}
-                onClick={() => setActiveTab("history")}
-              >
-                View in History →
-              </button>
-            </div>
-          )}
+          <div className="hero-proof"><span className="proof-dot" /> Built on Stellar/Soroban <span className="proof-divider" /> Transparent USDC settlement</div>
         </div>
-      )}
-
-      {/* ══ HISTORY TAB ══ */}
-      {activeTab === "history" && (
-        <div role="tabpanel" aria-label="Payout History">
-          {!isConnected && (
-            <div className="wallet-gate">
-              <p>Connect your wallet to load payout history.</p>
-              <button
-                className="primary-btn"
-                onClick={connect}
-                disabled={connecting}
-              >
-                {connecting ? "Connecting…" : "Connect Wallet"}
-              </button>
-            </div>
-          )}
-          {isConnected && (
-            <HistoryTab
-              addresses={historyAddresses}
-              pendingTxHash={txResult?.txHash}
-            />
-          )}
+        <div className="hero-visual" aria-label="Illustration of a cross-border payout moving from the diaspora to Nigeria">
+          <div className="visual-glow" /><div className="route-line route-line-one" /><div className="route-line route-line-two" />
+          <div className="route-point route-point-source"><span>◎</span><small>USD</small></div>
+          <div className="route-point route-point-destination"><span>₦</span><small>NGN</small></div>
+          <div className="settlement-card"><span className="settlement-icon">✓</span><div><strong>Settlement complete</strong><small>2,400 USDC → ₦3,840,000</small></div><span className="settlement-time">02:14</span></div>
+          <div className="visual-label visual-label-source">Diaspora</div><div className="visual-label visual-label-destination">Nigeria</div>
         </div>
-      )}
-    </section>
+      </section>
+
+      <section className="trust-strip" aria-label="Platform highlights">
+        <div><strong>Minutes</strong><span>on-chain settlement</span></div><div><strong>24 hrs</strong><span>NGN off-ramp window</span></div><div><strong>1 batch</strong><span>for your whole payroll</span></div><div><strong>100%</strong><span>fee visibility</span></div>
+      </section>
+
+      <section className="landing-section problem-section">
+        <div className="section-intro"><p className="eyebrow">Why StellarRemit</p><h2>Money should move at the speed of your business.</h2><p>Traditional rails were built for a different era. StellarRemit gives modern teams a clearer path from foreign currency to local cash.</p></div>
+        <div className="comparison-grid"><article className="comparison-card comparison-card-muted"><span className="card-index">01 / THE OLD WAY</span><div className="comparison-icon">↘</div><h3>Remittances that lose time and value.</h3><p>Traditional remittances charge 5–15% fees and can take 3–7 days to arrive.</p><div className="metric-bad">5–15% <span>typical fees</span></div></article><article className="comparison-card comparison-card-accent"><span className="card-index">02 / THE STELLARREMIT WAY</span><div className="comparison-icon">↗</div><h3>Settlement you can see and trust.</h3><p>On-chain settlement in minutes. Off-ramp to NGN within 24 hours. Transparent fees from send to payout.</p><div className="metric-good">Minutes <span>to settle on-chain</span></div></article></div>
+      </section>
+
+      <section className="landing-section workflow-section" id="how-it-works"><div className="section-intro section-intro-centered"><p className="eyebrow">A simpler payout run</p><h2>From wallet to local cash, in four steps.</h2></div><div className="steps-grid">{steps.map(([number, title, text]) => <article className="step" key={number}><span className="step-number">{number}</span><h3>{title}</h3><p>{text}</p></article>)}</div></section>
+
+      <section className="landing-section audience-section"><div className="audience-copy"><p className="eyebrow">Built for the people doing the work</p><h2>One reliable rail for every kind of payout.</h2><p>Whether you are supporting family, running payroll, or moving money for customers, StellarRemit keeps the important details in one place.</p><Link className="text-link" href="/dashboard">Open the payout dashboard <span aria-hidden="true">↗</span></Link></div><div className="audience-list"><div><span className="audience-number">01</span><strong>Diaspora Nigerians</strong><p>Send support home with clear rates and a payout you can track.</p></div><div><span className="audience-number">02</span><strong>Payroll managers</strong><p>Pay distributed teams in one batch without stitching together providers.</p></div><div><span className="audience-number">03</span><strong>Remittance services</strong><p>Build a dependable settlement layer into your customer experience.</p></div></div></section>
+
+      <section className="landing-section readiness-section"><div className="section-intro"><p className="eyebrow">Built for responsible scale</p><h2>From working prototype to public utility.</h2><p>The next phase is focused on the work that makes payment infrastructure dependable: partner integration, independent security review, observability, and a controlled pilot.</p><a className="text-link" href="https://github.com/alamuoyeemmanuel7-create/stellar-remit/blob/main/FUNDING.md" target="_blank" rel="noreferrer">Read the funding brief <span aria-hidden="true">↗</span></a></div><div className="readiness-grid"><div><strong>01</strong><h3>Partner-ready</h3><p>Sandbox off-ramp integration and a clear reconciliation trail.</p></div><div><strong>02</strong><h3>Security-led</h3><p>Independent review, least-privilege roles, and key rotation runbooks.</p></div><div><strong>03</strong><h3>Measurable</h3><p>Public pilot metrics for speed, cost, reliability, and repeat usage.</p></div></div></section>
+
+      <section className="closing-cta"><p className="eyebrow">Ready when you are</p><h2>Put your next payout on-chain.</h2><p>Connect a wallet and start with a transparent batch payout workflow.</p><Link className="hero-cta" href="/dashboard">Get started <span aria-hidden="true">↗</span></Link></section>
+    </div>
   );
 }
