@@ -31,6 +31,7 @@ export interface WalletState {
   address: string | null;
   isConnected: boolean;
   connecting: boolean;
+  error: string | null;
   connect: () => Promise<void>;
   disconnect: () => void;
 }
@@ -40,6 +41,7 @@ const WalletContext = createContext<WalletState | null>(null);
 export function WalletProvider({ children }: { children: ReactNode }) {
   const [address, setAddress] = useState<string | null>(null);
   const [connecting, setConnecting] = useState(false);
+  const [error, setError] = useState<string | null>(null);
 
   // On mount, check whether the extension has already authorised this origin
   // and restore the address if so.
@@ -64,20 +66,32 @@ export function WalletProvider({ children }: { children: ReactNode }) {
 
   const connect = useCallback(async () => {
     setConnecting(true);
+    setError(null);
     try {
       const { isConnected } = await freighterIsConnected();
       if (!isConnected) {
-        throw new Error(
-          "Freighter extension is not installed. " +
-            "Download it at https://www.freighter.app"
+        setError(
+          "Freighter is not available in this browser. Install the extension, then reload this page."
         );
+        return;
       }
       // requestAccess prompts the user in the extension popup.
       const { address: addr, error } = await requestAccess();
       if (error) {
-        throw new Error(error.message ?? "Freighter access request failed.");
+        setError(error.message ?? "Freighter access request was rejected.");
+        return;
+      }
+      if (!addr) {
+        setError("Freighter did not return a wallet address. Please try again.");
+        return;
       }
       setAddress(addr);
+    } catch (e) {
+      setError(
+        e instanceof Error
+          ? e.message
+          : "Unable to connect to Freighter. Please try again."
+      );
     } finally {
       setConnecting(false);
     }
@@ -93,6 +107,7 @@ export function WalletProvider({ children }: { children: ReactNode }) {
         address,
         isConnected: !!address,
         connecting,
+        error,
         connect,
         disconnect,
       }}
