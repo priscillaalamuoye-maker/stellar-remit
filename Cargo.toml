@@ -3,3 +3,25 @@ resolver = "2"
 members = [
     "contracts/payroll-remit",
 ]
+
+# ── Workspace-level profiles ──────────────────────────────────────────────────
+# Defined here (workspace root) so they apply to all members.
+# Having them only in contracts/payroll-remit/Cargo.toml produces a warning
+# because non-root package profiles are ignored by Cargo.
+
+[profile.test]
+opt-level = 1
+
+[profile.release]
+opt-level = "z"
+overflow-checks = true
+debug = 0
+strip = "symbols"
+debug-assertions = false
+panic = "abort"
+codegen-units = 1
+lto = true
+
+[profile.release-with-logs]
+inherits = "release"
+debug-assertions = true

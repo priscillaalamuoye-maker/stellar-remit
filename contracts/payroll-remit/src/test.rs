@@ -384,8 +384,7 @@ fn test_unauthorized_caller_rejected() {
     client.init(&admin, &token_addr);
 
     let r1 = Address::generate(&env);
-    let result =
-        client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
+    let result = client.try_add_recipient(&intruder, &r1, &String::from_str(&env, "hash:acct-001"));
     assert!(result.is_err());
 }
 
